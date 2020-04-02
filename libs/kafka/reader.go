@@ -447,13 +447,15 @@ func (this *GroupTopicConsumer) getAllPartitions(topic string) (partitions []int
 }
 
 func (this *GroupTopicConsumer) zkHeartBeat(closeChan, doneChan chan string) {
+	heartbeatTicker := time.NewTicker(time.Second * 10)
+	defer heartbeatTicker.Stop()
 	for {
 		select {
 		case <-closeChan:
 			log.Printf("%s 停止 zk 心跳", this.name())
 			doneChan <- "EXITDONE"
 			return
-		case <-time.After(time.Second * 10):
+		case <-heartbeatTicker.C:
 			// log.Printf("%s zk 心跳", this.name())
 			this.zkConn.Exists("/")
 		}
@@ -604,6 +606,9 @@ func (this *partitionConsumer) run() (err error) {
 	savedOffset := this.curOffset
 	this.running = true
 	this.statusLock.Unlock()
+
+	ticker := time.NewTicker(this.zkOffsetWriteTime)
+	defer ticker.Stop()
 	for {
 		select {
 		case msg, ok = <-this.in:
@@ -622,7 +627,7 @@ func (this *partitionConsumer) run() (err error) {
 				savedOffset = this.updateOffset(this.curOffset)
 			}
 			this.out <- msg
-		case <-time.After(this.zkOffsetWriteTime):
+		case <-ticker.C:
 			// fmt.Println(this.name(), "XXXXXXXX", this.curOffset, savedOffset)
 			if this.curOffset != savedOffset {
 				// fmt.Println(this.name(), "XXXXXXXXVVVVVVV")
